@@ -33,6 +33,22 @@ func FindImagesInOCITree(index v1.ImageIndex, matcher match.Matcher) ([]v1.Image
 	for _, descriptor := range manifest.Manifests {
 		switch {
 		case descriptor.MediaType.IsImage():
+			// If the platform is not part of the index manifest, attempt to
+			// load it from the image config
+			if descriptor.Platform == nil {
+				img, err := index.Image(descriptor.Digest)
+				if err != nil {
+					return nil, fmt.Errorf("could not load image: %w", err)
+				}
+
+				cfg, err := img.ConfigFile()
+				if err != nil {
+					return nil, fmt.Errorf("could not load image config: %w", err)
+				}
+
+				descriptor.Platform = cfg.Platform()
+			}
+
 			if matcher(descriptor) {
 				img, err := index.Image(descriptor.Digest)
 				if err != nil {
