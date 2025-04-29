@@ -17,6 +17,8 @@ limitations under the License.
 package cmd
 
 import (
+	"fmt"
+
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/layout"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
@@ -41,21 +43,25 @@ var CommandResetLabelsAndAnnotations = cobra.Command{
 
 			index, err = pkg.MutateOCITree(
 				index,
-				func(index v1.ImageIndex) v1.ImageIndex {
-					return pkg.ReplaceImageIndexAnnotations(index, map[string]string{})
-				}, func(image v1.Image) v1.Image {
+				func(index v1.ImageIndex) (v1.ImageIndex, error) {
+					return pkg.ReplaceImageIndexAnnotations(index, map[string]string{}), nil
+				}, func(image v1.Image) (v1.Image, error) {
 					configFile, err := image.ConfigFile()
-					must("could not parse config file", err)
+					if err != nil {
+						return nil, fmt.Errorf("could not parse config file: %w", err)
+					}
 
 					configFile.Config.Labels = map[string]string{}
 
 					image, err = mutate.ConfigFile(image, configFile)
-					must("could not replace config file", err)
+					if err != nil {
+						return nil, fmt.Errorf("could not replace config file: %w", err)
+					}
 
-					return pkg.ReplaceImageAnnotations(image, map[string]string{})
-				}, func(descriptor v1.Descriptor) v1.Descriptor {
+					return pkg.ReplaceImageAnnotations(image, map[string]string{}), nil
+				}, func(descriptor v1.Descriptor) (v1.Descriptor, error) {
 					descriptor.Annotations = map[string]string{}
-					return descriptor
+					return descriptor, nil
 				},
 			)
 			must("could not modify oci tree", err)

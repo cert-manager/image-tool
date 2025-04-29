@@ -17,6 +17,7 @@ limitations under the License.
 package cmd
 
 import (
+	"fmt"
 	"runtime"
 
 	"github.com/google/go-containerregistry/pkg/name"
@@ -43,9 +44,34 @@ var CommandConvertToDockerTar = cobra.Command{
 		index, err := ociLayout.ImageIndex()
 		must("could not load oci image index", err)
 
-		images, err := pkg.FindImagesInOCITree(index, func(desc v1.Descriptor) bool {
-			return desc.Platform != nil && desc.Platform.Architecture == runtime.GOARCH
-		})
+		var images []v1.Image
+		err = pkg.SearchOCITree(index, nil,
+			func(descriptors []*v1.Descriptor, image v1.Image) error {
+				var platform *v1.Platform
+
+				for _, desc := range descriptors {
+					if desc.Platform != nil {
+						platform = desc.Platform
+					}
+				}
+
+				{
+					cfg, err := image.ConfigFile()
+					if err != nil {
+						return fmt.Errorf("could not load image config: %w", err)
+					}
+					if imgPlatform := cfg.Platform(); imgPlatform != nil {
+						platform = imgPlatform
+					}
+				}
+
+				if platform != nil && platform.Architecture == runtime.GOARCH {
+					images = append(images, image)
+				}
+
+				return nil
+			},
+		)
 		must("could not find images", err)
 
 		switch {

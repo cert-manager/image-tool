@@ -24,9 +24,9 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 )
 
-type IndexMutateFn func(index v1.ImageIndex) v1.ImageIndex
-type ImageMutateFn func(image v1.Image) v1.Image
-type DescriptorMutateFn func(descriptor v1.Descriptor) v1.Descriptor
+type IndexMutateFn func(index v1.ImageIndex) (v1.ImageIndex, error)
+type ImageMutateFn func(image v1.Image) (v1.Image, error)
+type DescriptorMutateFn func(descriptor v1.Descriptor) (v1.Descriptor, error)
 
 func MutateOCITree(
 	index v1.ImageIndex,
@@ -49,8 +49,12 @@ func MutateOCITree(
 				return nil, fmt.Errorf("could not load oci image from digest: %w", err)
 			}
 
-			childImg = mutImageFn(childImg)
-
+			if mutImageFn != nil {
+				childImg, err = mutImageFn(childImg)
+				if err != nil {
+					return nil, fmt.Errorf("could not mutate oci image: %w", err)
+				}
+			}
 			child = childImg
 		case descriptor.MediaType.IsIndex():
 			childIndex, err := index.ImageIndex(descriptor.Digest)
@@ -62,31 +66,43 @@ func MutateOCITree(
 			if err != nil {
 				return nil, err
 			}
-
 			child = childIndex
 		default:
 			continue
 		}
 
-		digest, err := child.Digest()
+		oldDigest := descriptor.Digest
+		newDigest, err := child.Digest()
 		if err != nil {
 			return nil, fmt.Errorf("could not get image digest: %w", err)
 		}
-
-		size, err := child.Size()
+		newSize, err := child.Size()
 		if err != nil {
 			return nil, fmt.Errorf("could not get image size: %w", err)
 		}
 
+		descriptor.Digest = newDigest
+		descriptor.Size = newSize
+		if mutDescriptorFn != nil {
+			descriptor, err = mutDescriptorFn(descriptor)
+			if err != nil {
+				return nil, fmt.Errorf("could not mutate descriptor: %w", err)
+			}
+		}
+
 		// Remove descriptor from index and re-add descriptor
-		index = mutate.RemoveManifests(index, match.Digests(descriptor.Digest))
-		descriptor.Digest = digest
-		descriptor.Size = size
+		index = mutate.RemoveManifests(index, match.Digests(oldDigest))
 		index = mutate.AppendManifests(index, mutate.IndexAddendum{
 			Add:        child,
-			Descriptor: mutDescriptorFn(descriptor),
+			Descriptor: descriptor,
 		})
 	}
 
-	return mutIndexFn(index), nil
+	if mutIndexFn != nil {
+		index, err = mutIndexFn(index)
+		if err != nil {
+			return nil, fmt.Errorf("could not mutate index: %w", err)
+		}
+	}
+	return index, nil
 }
