@@ -20,12 +20,13 @@ import (
 	"fmt"
 	"runtime"
 
-	"github.com/cert-manager/image-tool/pkg"
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/layout"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	"github.com/spf13/cobra"
+
+	"github.com/cert-manager/image-tool/pkg"
 )
 
 var CommandConvertToDockerTar = cobra.Command{
