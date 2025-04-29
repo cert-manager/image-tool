@@ -19,6 +19,7 @@ package cmd
 import (
 	"archive/tar"
 	"bytes"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -59,13 +60,12 @@ var CommandAppendLayers = cobra.Command{
 			}
 
 			index, err = pkg.MutateOCITree(
-				index,
-				func(index v1.ImageIndex) v1.ImageIndex {
-					return index
-				},
-				func(img v1.Image) v1.Image {
+				index, nil,
+				func(img v1.Image) (v1.Image, error) {
 					imgMediaType, err := img.MediaType()
-					must("could not get image media type", err)
+					if err != nil {
+						return nil, fmt.Errorf("could not get image media type: %w", err)
+					}
 
 					layerType := types.DockerLayer
 					if imgMediaType == types.OCIManifestSchema1 {
@@ -74,17 +74,19 @@ var CommandAppendLayers = cobra.Command{
 
 					for _, untypedLayer := range layers {
 						layer, err := untypedLayer.ToLayer(layerType)
-						must("could not load image layer", err)
+						if err != nil {
+							return nil, fmt.Errorf("could not load image layer: %w", err)
+						}
 
 						img, err = mutate.AppendLayers(img, layer)
-						must("could not append layer", err)
+						if err != nil {
+							return nil, fmt.Errorf("could not append layer: %w", err)
+						}
 					}
 
-					return img
+					return img, nil
 				},
-				func(descriptor v1.Descriptor) v1.Descriptor {
-					return descriptor
-				},
+				nil,
 			)
 			must("could not modify oci tree", err)
 
