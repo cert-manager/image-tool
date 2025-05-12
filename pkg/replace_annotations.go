@@ -70,6 +70,10 @@ func (a imageAnnotationsReplacer) Digest() (v1.Hash, error) {
 	return partial.Digest(a)
 }
 
+func (a imageAnnotationsReplacer) Size() (int64, error) {
+	return partial.Size(a)
+}
+
 func (a imageAnnotationsReplacer) Manifest() (*v1.Manifest, error) {
 	return partial.Manifest(a)
 }
@@ -87,6 +91,10 @@ func (a indexAnnotationsReplacer) RawManifest() ([]byte, error) {
 
 func (a indexAnnotationsReplacer) Digest() (v1.Hash, error) {
 	return partial.Digest(a)
+}
+
+func (a indexAnnotationsReplacer) Size() (int64, error) {
+	return partial.Size(a)
 }
 
 func (a indexAnnotationsReplacer) Manifest() (*v1.Manifest, error) {
