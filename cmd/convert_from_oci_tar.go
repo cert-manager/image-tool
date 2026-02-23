@@ -18,12 +18,11 @@ package cmd
 
 import (
 	"archive/tar"
-	"errors"
 	"fmt"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
+	"strings"
 
 	"github.com/google/go-containerregistry/pkg/v1/layout"
 	"github.com/spf13/cobra"
@@ -59,18 +58,39 @@ var CommandConvertFromOCITar = cobra.Command{
 	},
 }
 
-func cleanJoin(root, dest string) (string, error) {
-	path := path.Clean("/" + dest)[1:]
-	if path == "" {
-		path = "."
+func cleanJoin(baseDir, unsafePath string) (string, error) {
+	if filepath.IsAbs(unsafePath) {
+		return "", fmt.Errorf("absolute paths not allowed: %s", unsafePath)
 	}
 
-	path, err := filepath.Localize(path)
+	cleaned := filepath.Clean(unsafePath)
+
+	if strings.HasPrefix(cleaned, ".."+string(os.PathSeparator)) || cleaned == ".." {
+		return "", fmt.Errorf("path traversal detected: %s", unsafePath)
+	}
+
+	fullPath := filepath.Join(baseDir, cleaned)
+
+	absBase, err := filepath.Abs(baseDir)
 	if err != nil {
-		return "", errors.New("invalid or unsafe file path")
+		return "", err
 	}
 
-	return filepath.Join(root, path), nil
+	absTarget, err := filepath.Abs(fullPath)
+	if err != nil {
+		return "", err
+	}
+
+	rel, err := filepath.Rel(absBase, absTarget)
+	if err != nil {
+		return "", err
+	}
+
+	if strings.HasPrefix(rel, "..") {
+		return "", fmt.Errorf("path escapes base directory: %s", unsafePath)
+	}
+
+	return absTarget, nil
 }
 
 func untar(src string, dest string) error {
@@ -97,14 +117,30 @@ func untar(src string, dest string) error {
 
 		switch header.Typeflag {
 		case tar.TypeDir:
+			// #nosec G703 -- path validated via cleanJoin to prevent traversal
 			if err := os.MkdirAll(path, 0755); err != nil {
 				return err
 			}
 		case tar.TypeReg:
-			outFile, err := os.Create(path)
+			// #nosec G703 -- directory path validated via cleanJoin
+			if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+				return err
+			}
+
+			if header.Mode < 0 || header.Mode > 0o777 {
+				return fmt.Errorf("invalid file mode in tar header: %d", header.Mode)
+			}
+			perm := os.FileMode(uint32(header.Mode))
+			// #nosec G703 -- path validated via cleanJoin to prevent traversal
+			outFile, err := os.OpenFile(
+				path,
+				os.O_CREATE|os.O_WRONLY|os.O_TRUNC,
+				perm,
+			)
 			if err != nil {
 				return err
 			}
+
 			written, err := io.Copy(outFile, io.LimitReader(tarReader, maxFileSize))
 			outFile.Close()
 			if err != nil {
@@ -113,6 +149,8 @@ func untar(src string, dest string) error {
 				// Prevents G110: Potential DoS vulnerability via decompression bomb
 				return fmt.Errorf("tar contained file larger than 500MB")
 			}
+		case tar.TypeSymlink, tar.TypeLink:
+			return fmt.Errorf("symlinks not allowed in tar archive: %s", header.Name)
 		default:
 			return fmt.Errorf("unable to untar type: %c in file %s", header.Typeflag, header.Name)
 		}
