@@ -97,11 +97,11 @@ func untar(src string, dest string) error {
 
 		switch header.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(path, 0755); err != nil {
+			if err := os.MkdirAll(path, 0755); err != nil { //nolint:gosec // G703: path is sanitized by cleanJoin
 				return err
 			}
 		case tar.TypeReg:
-			outFile, err := os.Create(path)
+			outFile, err := os.Create(path) //nolint:gosec // G703: path is sanitized by cleanJoin
 			if err != nil {
 				return err
 			}
