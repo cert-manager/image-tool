@@ -127,6 +127,10 @@ func newUntypedLayerFromPath(path string) untypedLayer {
 
 		tw := tar.NewWriter(&buf)
 
+		root, err := os.OpenRoot(path)
+		must("could not open root directory", err)
+		defer root.Close()
+
 		_ = filepath.Walk(path, func(target string, info fs.FileInfo, err error) error {
 			must("walk error", err)
 
@@ -149,7 +153,7 @@ func newUntypedLayerFromPath(path string) untypedLayer {
 			must("could not write tar header", err)
 
 			if !info.IsDir() {
-				file, err := os.Open(target)
+				file, err := root.Open(name)
 				must("could not write tar contents", err)
 
 				defer file.Close()
