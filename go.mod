@@ -3,7 +3,7 @@ module github.com/cert-manager/image-tool
 go 1.25.7
 
 require (
-	github.com/google/go-containerregistry v0.21.8
+	github.com/google/go-containerregistry v0.21.9
 	github.com/spf13/cobra v1.10.2
 )
 
